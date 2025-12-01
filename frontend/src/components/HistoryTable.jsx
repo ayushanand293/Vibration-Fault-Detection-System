@@ -1,7 +1,10 @@
 import React from 'react';
-import { Clock, TrendingUp } from 'lucide-react';
+import { Clock, TrendingUp, Download } from 'lucide-react';
+import axios from 'axios';
 
 const HistoryTable = ({ history }) => {
+  const [downloadingIndex, setDownloadingIndex] = React.useState(null);
+
   if (!history || history.length === 0) {
     return (
       <div style={{
@@ -43,6 +46,46 @@ const HistoryTable = ({ history }) => {
     );
   };
 
+  const handleDownloadReport = async (item, index) => {
+    setDownloadingIndex(index);
+    try {
+      // Make sure signal is an array
+      const signalArray = Array.isArray(item.signal) ? item.signal : [];
+      
+      if (signalArray.length === 0) {
+        alert('No signal data available for this prediction');
+        return;
+      }
+
+      // Send request with correct format
+      const response = await axios.post(
+        'http://localhost:8000/diagnostic-report',
+        {
+          signal: signalArray,
+          sampling_rate: 12000
+        },
+        {
+          responseType: 'blob'
+        }
+      );
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `bearing_diagnostic_report_${Date.now()}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download report:', err);
+      alert('Failed to generate report. Please try again.');
+    } finally {
+      setDownloadingIndex(null);
+    }
+  };
+
   return (
     <div style={{
       background: 'white',
@@ -64,6 +107,7 @@ const HistoryTable = ({ history }) => {
               <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#6b7280' }}>Prediction</th>
               <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#6b7280' }}>Confidence</th>
               <th style={{ padding: '0.75rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: '600', color: '#6b7280' }}>Samples</th>
+              <th style={{ padding: '0.75rem', textAlign: 'center', fontSize: '0.875rem', fontWeight: '600', color: '#6b7280' }}>Report</th>
             </tr>
           </thead>
           <tbody>
@@ -99,6 +143,43 @@ const HistoryTable = ({ history }) => {
                 </td>
                 <td style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#6b7280' }}>
                   {item.sampleCount}
+                </td>
+                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                  <button
+                    onClick={() => handleDownloadReport(item, index)}
+                    disabled={downloadingIndex === index}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: downloadingIndex === index ? '#9ca3af' : '#6366f1',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: downloadingIndex === index ? 'not-allowed' : 'pointer',
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (downloadingIndex !== index) {
+                        e.target.style.background = '#4f46e5';
+                        e.target.style.transform = 'translateY(-2px)';
+                        e.target.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.3)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (downloadingIndex !== index) {
+                        e.target.style.background = '#6366f1';
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                      }
+                    }}
+                  >
+                    <Download size={16} />
+                    {downloadingIndex === index ? 'Generating...' : 'PDF'}
+                  </button>
                 </td>
               </tr>
             ))}

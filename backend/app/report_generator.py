@@ -132,8 +132,7 @@ class ReportGenerator:
             ['Report Date', datetime.now().strftime('%B %d, %Y')],
             ['Time Generated', datetime.now().strftime('%I:%M %p')],
             ['Sampling Rate', f'{sampling_rate:,} Hz'],
-            ['Signal Length', f'{len(signal):,} samples'],
-            ['ML Algorithm', 'Random Forest Classifier']
+            ['Signal Length', f'{len(signal):,} samples']
         ]
         
         metadata_table = Table(metadata_data, colWidths=[2.3*inch, 3.7*inch])

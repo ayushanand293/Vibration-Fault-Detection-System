@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Zap, Download } from 'lucide-react';
+import { Upload, Zap, Download, Paperclip } from 'lucide-react';
 import { predictFault, getExampleSignal, downloadDiagnosticReport } from '../services/api';
 
 const PredictionPanel = ({ onPrediction, onSignalLoaded }) => {
@@ -19,6 +19,11 @@ const PredictionPanel = ({ onPrediction, onSignalLoaded }) => {
         return;
       }
       
+      // Load signal FIRST so FFT chart appears
+      if (onSignalLoaded) {
+        onSignalLoaded(signalArray);
+      }
+      
       const result = await predictFault(signalArray);
       onPrediction(result);
     } catch (err) {
@@ -36,10 +41,6 @@ const PredictionPanel = ({ onPrediction, onSignalLoaded }) => {
       const data = await getExampleSignal(type);
       const signalArray = data.signal;
       setSignal(signalArray.join(', '));
-      
-      if (onSignalLoaded) {
-        onSignalLoaded(signalArray);
-      }
     } catch (err) {
       setError('Failed to load example');
     } finally {
@@ -54,6 +55,31 @@ const PredictionPanel = ({ onPrediction, onSignalLoaded }) => {
     } catch (err) {
       setError('Failed to generate report');
     }
+  };
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result;
+        const values = text.split(/[,\n\r\s]+/).map(x => parseFloat(x.trim())).filter(x => !isNaN(x));
+        
+        if (values.length < 100) {
+          setError('CSV file must contain at least 100 samples');
+          return;
+        }
+        
+        setSignal(values.join(', '));
+        
+        setError('');
+      } catch (err) {
+        setError('Failed to read CSV file');
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -75,8 +101,8 @@ const PredictionPanel = ({ onPrediction, onSignalLoaded }) => {
         <textarea
           value={signal}
           onChange={(e) => setSignal(e.target.value)}
-          placeholder="Load an example below..."
-          rows={5}
+          placeholder="Load an example below or attach a CSV file..."
+          rows={12}
           style={{
             width: '100%',
             padding: '0.75rem',
@@ -88,17 +114,17 @@ const PredictionPanel = ({ onPrediction, onSignalLoaded }) => {
         />
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-        <button onClick={() => loadExample('normal')} disabled={loading} style={{ padding: '0.5rem 1rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+        <button onClick={() => loadExample('normal')} disabled={loading} style={{ padding: '0.75rem 1rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500' }}>
           Load Normal
         </button>
-        <button onClick={() => loadExample('fault/ball')} disabled={loading} style={{ padding: '0.5rem 1rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
+        <button onClick={() => loadExample('fault/ball')} disabled={loading} style={{ padding: '0.75rem 1rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500' }}>
           Load Ball Fault
         </button>
-        <button onClick={() => loadExample('fault/inner_race')} disabled={loading} style={{ padding: '0.5rem 1rem', background: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
+        <button onClick={() => loadExample('fault/inner_race')} disabled={loading} style={{ padding: '0.75rem 1rem', background: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500' }}>
           Load Inner Race
         </button>
-        <button onClick={() => loadExample('fault/outer_race')} disabled={loading} style={{ padding: '0.5rem 1rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem' }}>
+        <button onClick={() => loadExample('fault/outer_race')} disabled={loading} style={{ padding: '0.75rem 1rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500' }}>
           Load Outer Race
         </button>
       </div>
@@ -109,12 +135,24 @@ const PredictionPanel = ({ onPrediction, onSignalLoaded }) => {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '1rem' }}>
-        <button onClick={handlePredict} disabled={loading || !signal} style={{ padding: '0.75rem 2rem', background: loading ? '#9ca3af' : '#667eea', color: 'white', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <input
+        type="file"
+        accept=".csv"
+        onChange={handleFileUpload}
+        style={{ display: 'none' }}
+        id="csv-file-input"
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+        <label htmlFor="csv-file-input" style={{ padding: '0.875rem', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+          <Paperclip size={20} />
+          Attach CSV
+        </label>
+        <button onClick={handlePredict} disabled={loading || !signal} style={{ padding: '0.875rem', background: loading ? '#9ca3af' : '#667eea', color: 'white', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '1rem', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
           <Upload size={20} />
           {loading ? 'Analyzing...' : 'Predict'}
         </button>
-        <button onClick={handleDownloadReport} disabled={!signal} style={{ padding: '0.75rem 2rem', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <button onClick={handleDownloadReport} disabled={!signal} style={{ padding: '0.875rem', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '1rem', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
           <Download size={20} />
           Download PDF
         </button>

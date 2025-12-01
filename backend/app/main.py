@@ -163,7 +163,8 @@ def predict_fault(data: SignalData):
             "prediction": prediction,
             "confidence": float(max(probabilities)),
             "probabilities": prob_dict,
-            "features": features_dict
+            "features": features_dict,
+            "signal": data.signal  # Add the signal to the response
         }
     
     except Exception as e:
