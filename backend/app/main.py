@@ -259,17 +259,108 @@ async def generate_diagnostic_report(data: SignalData):
         )
 
 @app.get("/stream-signal")
-async def stream_signal():
-    """Stream simulated real-time vibration data"""
+async def stream_signal(mode: str = 'real'):
+    """
+    Stream simulated real-time vibration data with predictions
+    mode: 'real' (CWRU data) or 'random' (generated noise)
+    """
     async def generate():
         import json
-        for i in range(100):
-            data_point = {
-                "timestamp": time.time(),
-                "amplitude": float(np.random.randn() * 0.001)
-            }
-            yield f"data: {json.dumps(data_point)}\n\n"
-            await asyncio.sleep(0.1)
-    
+        import random
+        
+        # Load real segments for simulation
+        scenarios = ['normal', 'fault/ball', 'fault/inner_race', 'fault/outer_race']
+        
+        while True:
+            if mode == 'real':
+                # Pick a random scenario
+                scenario = random.choice(scenarios)
+                signal_segment = load_real_signal_segment(scenario)
+                
+                if signal_segment is None:
+                    continue
+                    
+                # Stream this segment point by point
+                buffer = []
+                for val in signal_segment[:500]: # Stream 500 points per scenario switch
+                    data_point = {
+                        "timestamp": time.time(),
+                        "amplitude": float(val)
+                    }
+                    yield f"data: {json.dumps(data_point)}\n\n"
+                    
+                    # Add to buffer for prediction
+                    buffer.append(val)
+                    if len(buffer) >= 100:
+                        # Run prediction on buffer
+                        try:
+                            features = extract_features(buffer[-100:]) # Last 100 points
+                            feature_array = np.array(list(features.values())).reshape(1, -1)
+                            prediction = model.predict(feature_array)[0]
+                            confidence = float(max(model.predict_proba(feature_array)[0]))
+                            
+                            # Map to class names
+                            class_names = model.classes_
+                            prob_dict = {name: float(prob) for name, prob in zip(class_names, model.predict_proba(feature_array)[0])}
+                            
+                            pred_event = {
+                                "type": "prediction",
+                                "prediction": prediction,
+                                "confidence": confidence,
+                                "probabilities": prob_dict,
+                                "features": features,
+                                "scenario": scenario # For debugging/verification
+                            }
+                            yield f"event: prediction\ndata: {json.dumps(pred_event)}\n\n"
+                        except Exception as e:
+                            print(f"Stream prediction error: {e}")
+                    
+                    await asyncio.sleep(0.05) # 20Hz streaming rate for visualization
+            
+            else: # Random mode
+                # Generate random noise/sine waves
+                buffer = []
+                # Simulate a "scenario" for random mode too (e.g. just noise vs high amplitude noise)
+                is_noisy = random.random() > 0.5
+                scenario = "simulated_noise" if not is_noisy else "simulated_fault"
+                
+                for i in range(200): # Stream 200 points
+                    t = time.time()
+                    if is_noisy:
+                        val = np.sin(t * 10) * 0.5 + np.random.normal(0, 0.2)
+                    else:
+                        val = np.random.normal(0, 0.05)
+                        
+                    data_point = {
+                        "timestamp": t,
+                        "amplitude": float(val)
+                    }
+                    yield f"data: {json.dumps(data_point)}\n\n"
+                    
+                    buffer.append(val)
+                    if len(buffer) >= 100:
+                        try:
+                            features = extract_features(buffer[-100:])
+                            feature_array = np.array(list(features.values())).reshape(1, -1)
+                            prediction = model.predict(feature_array)[0]
+                            confidence = float(max(model.predict_proba(feature_array)[0]))
+                            
+                            class_names = model.classes_
+                            prob_dict = {name: float(prob) for name, prob in zip(class_names, model.predict_proba(feature_array)[0])}
+                            
+                            pred_event = {
+                                "type": "prediction",
+                                "prediction": prediction,
+                                "confidence": confidence,
+                                "probabilities": prob_dict,
+                                "features": features,
+                                "scenario": scenario
+                            }
+                            yield f"event: prediction\ndata: {json.dumps(pred_event)}\n\n"
+                        except Exception as e:
+                            pass
+                            
+                    await asyncio.sleep(0.05)
+
     return StreamingResponse(generate(), media_type="text/event-stream")
 
